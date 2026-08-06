@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Oda Virtual Store</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud">
+      <div id="reticle"><div id="reticle-ring"></div><div id="reticle-dot"></div></div>
+
+      <div id="hover-label" class="hidden">
+        <span id="hover-name"></span>
+        <span id="hover-price"></span>
+      </div>
+
+      <div id="detail-panel" class="hidden">
+        <img id="detail-img" alt="" />
+        <div id="detail-body">
+          <h2 id="detail-name"></h2>
+          <div id="detail-brand"></div>
+          <div id="detail-extra"></div>
+          <div id="detail-price-row">
+            <span id="detail-price"></span>
+            <span id="detail-unit-price"></span>
+          </div>
+          <div id="detail-classifiers"></div>
+          <p id="detail-desc"></p>
+          <div class="detail-hint"><kbd>A</kbd> +1 &nbsp; <kbd>X</kbd> −1 &nbsp;·&nbsp; <kbd>Q</kbd>/<kbd>←</kbd> sidesteg</div>
+        </div>
+      </div>
+
+      <div id="cart-panel">
+        <div id="cart-header">
+          <span>🛒 Handlekurv</span>
+          <span id="cart-count">0</span>
+        </div>
+        <div id="cart-items"></div>
+        <div id="cart-footer">
+          <div id="cart-total-row"><span>Totalt</span><span id="cart-total">0.00 kr</span></div>
+          <div id="cart-fetched"></div>
+          <div id="cart-actions">
+            <button id="cart-export">Kopier for Claude</button>
+            <button id="cart-resume">Fortsett å handle</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="toast" class="hidden"></div>
+    </div>
+
+    <div id="overlay">
+      <div id="overlay-card">
+        <h1>Oda <span>Virtual Store</span></h1>
+        <p id="overlay-status">Laster…</p>
+        <div id="overlay-progress"><div id="overlay-bar"></div></div>
+        <button id="enter-btn" class="hidden">Gå inn i butikken</button>
+        <div id="overlay-help" class="hidden">
+          <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> gå &nbsp; <kbd>Shift</kbd> løp &nbsp; <kbd>Mus</kbd> se</div>
+          <div>Sikt på en vare i 0,5 s for detaljer &nbsp;·&nbsp; <kbd>A</kbd> legg i kurv &nbsp;·&nbsp; <kbd>C</kbd> kurv &nbsp;·&nbsp; <kbd>Esc</kbd> meny</div>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script type="module" src="/src/main.ts"></script>
+</html>
