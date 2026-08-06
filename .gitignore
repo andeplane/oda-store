@@ -1,8 +1,5 @@
 node_modules/
 dist/
 data/
-# Oda product photos — personal/local demo only, not for redistribution (ADR-0001)
-public/img/
-public/atlas/
 .DS_Store
 __pycache__/
