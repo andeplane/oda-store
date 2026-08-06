@@ -1,6 +1,7 @@
 // Cart state + HUD + cart mode + export (ADR-0003).
 
 import type { Catalog, Product } from "./data";
+import type { TileSource } from "./tiles";
 
 interface Line {
   product: Product;
@@ -20,7 +21,7 @@ export class Cart {
   private toastRun = 0;
   onChange: () => void = () => {};
 
-  constructor(private catalog: Catalog) {
+  constructor(private catalog: Catalog, private tiles: TileSource) {
     document.getElementById("cart-fetched")!.textContent = `Priser per ${catalog.fetchedAt.slice(0, 10)}`;
     document.addEventListener("keydown", (e) => {
       if (e.code === "KeyC" && document.body.classList.contains("playing")) {
@@ -78,9 +79,8 @@ export class Cart {
     for (const { product, qty } of this.lines.values()) {
       const row = document.createElement("div");
       row.className = "cart-item";
-      const img = document.createElement("img");
-      img.src = `img/${product.id}.jpg`;
-      img.alt = "";
+      const img = document.createElement("canvas");
+      void this.tiles.draw(img, product.id, 64);
       const name = document.createElement("span");
       name.className = "ci-name";
       name.textContent = product.name;

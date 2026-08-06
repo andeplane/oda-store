@@ -76,9 +76,12 @@ export interface AtlasIndex {
   cell: number;
   gutter: number;
   size: number;
+  detailPages: number;
+  detailTile: number;
+  detailGrid: number;
   format: "png" | "ktx2";
   vOrigin: "top";
-  tiles: Record<string, { atlas: number; uv: [number, number, number, number] }>;
+  tiles: Record<string, { atlas: number; uv: [number, number, number, number]; d?: [number, number, number] }>;
 }
 
 export interface World {

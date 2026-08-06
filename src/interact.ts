@@ -7,6 +7,7 @@ import { getDescription, type World } from "./data";
 import type { Cards } from "./cards";
 import type { Cart } from "./cart";
 import type { Player } from "./player";
+import type { TileSource } from "./tiles";
 
 const DWELL = 0.5;
 const GRACE = 0.35;
@@ -37,7 +38,8 @@ export class Interactions {
     private world: World,
     private cards: Cards,
     private cart: Cart,
-    private player: Player
+    private player: Player,
+    private tiles: TileSource
   ) {
     player.aIsAdd = () => this.panelId !== null;
     document.addEventListener("keydown", (e) => {
@@ -140,7 +142,7 @@ export class Interactions {
       if (sp.x < -0.02) side = "left";
     }
     this.panelEl.classList.toggle("left", side === "left");
-    (document.getElementById("detail-img") as HTMLImageElement).src = `img/${p.id}.jpg`;
+    void this.tiles.draw(document.getElementById("detail-img") as HTMLCanvasElement, p.id);
     document.getElementById("detail-name")!.textContent = p.name;
     document.getElementById("detail-brand")!.textContent = p.brand;
     document.getElementById("detail-extra")!.textContent = p.extra;

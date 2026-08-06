@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 RAW = DATA / "raw_products.jsonl"
 PUBLIC = ROOT / "public"
-IMG_DIR = PUBLIC / "img"  # runtime detail tiles AND atlas source
+IMG_DIR = ROOT / "images"  # pipeline source; runtime ships packed tile pages instead
 
 SCHEMA_VERSION = 1
 UA = {"User-Agent": "Mozilla/5.0 (oda-virtual-store; personal project)", "Accept": "application/json"}

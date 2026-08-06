@@ -102,7 +102,7 @@ body.cartmode #cart-panel { pointer-events: auto; }
 #cart-items { max-height: 38vh; overflow-y: auto; border-top: 1px solid var(--panel-border); }
 .cart-empty { padding: 14px 16px; font-size: 12px; color: var(--text-dim); }
 .cart-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; }
-.cart-item img { width: 32px; height: 32px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
+.cart-item img, .cart-item canvas { width: 32px; height: 32px; object-fit: contain; background: #fff; border-radius: 6px; flex: none; }
 .cart-item .ci-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ci-controls { display: none; align-items: center; gap: 4px; }
 body.cartmode .ci-controls { display: flex; }

@@ -1,11 +1,11 @@
 name: Deploy to GitHub Pages
 
-# The built site (incl. product images, which are gitignored on main) lives on
-# the gh-pages branch — this workflow deploys that branch via the Pages
-# artifact path, bypassing the legacy Jekyll builder.
+# Builds from main (atlases + tile pages are committed in public/) and deploys
+# the ~100-file dist artifact. Per-product images are NOT deployed — the Pages
+# pipeline times out on thousands of files; the app streams packed tile pages.
 on:
   push:
-    branches: [gh-pages]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -25,12 +25,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          ref: gh-pages
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vite build --base=./
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          timeout: 1800000 # 5.4k files deploy slowly; default 10 min gives up too early

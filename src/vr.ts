@@ -8,6 +8,7 @@ import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.
 import type { World, Product } from "./data";
 import type { Cards, CardInstance } from "./cards";
 import type { Cart } from "./cart";
+import type { TileSource } from "./tiles";
 import { Player, EYE_HEIGHT } from "./player";
 
 const GRAB_RANGE = 0.25;
@@ -21,13 +22,19 @@ interface Held {
   lostFor: number;
 }
 
-function productCardMesh(product: Product, w: number, h: number): THREE.Group {
+function productCardMesh(product: Product, w: number, h: number, tiles: TileSource): THREE.Group {
   const g = new THREE.Group();
   const mat = new THREE.MeshBasicMaterial({ color: 0xf4f4f6 });
   const card = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   card.material.side = THREE.DoubleSide;
   g.add(card);
-  new THREE.TextureLoader().load(`img/${product.id}.jpg`, (tex) => {
+  void tiles.bitmap(product.id).then((bmp) => {
+    if (!bmp) return;
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    c.getContext("2d")!.drawImage(bmp, 0, 0);
+    bmp.close();
+    const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     mat.map = tex;
     mat.color.set(0xffffff);
@@ -115,7 +122,8 @@ export class VRMode {
     private world: World,
     private cards: Cards,
     private cart: Cart,
-    private player: Player
+    private player: Player,
+    private tiles: TileSource
   ) {
     renderer.xr.enabled = true;
     renderer.xr.setReferenceSpaceType("local-floor");
@@ -216,7 +224,7 @@ export class VRMode {
     if (!cand) return;
     const product = this.world.byId.get(cand.productId);
     if (!product) return;
-    const mesh = productCardMesh(product, cand.w, cand.h);
+    const mesh = productCardMesh(product, cand.w, cand.h, this.tiles);
     mesh.position.copy(point);
     this.scene.add(mesh);
     this.held.set(hand, { product, mesh, lostFor: 0 });

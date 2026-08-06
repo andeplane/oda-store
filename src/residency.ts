@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import type { Cards } from "./cards";
+import type { TileSource } from "./tiles";
 
 const TILE = 256;
 const UPLOADS_PER_FRAME = 2;
@@ -29,6 +30,7 @@ export class Residency {
   constructor(
     private renderer: THREE.WebGLRenderer,
     private cards: Cards,
+    private tiles: TileSource,
     private radius: number,
     slotCount: number
   ) {
@@ -104,9 +106,8 @@ export class Residency {
     this.slots[slot] = { productId, lastWanted: this.clock };
     this.byProduct.set(productId, slot);
     try {
-      const resp = await fetch(`img/${productId}.jpg`);
-      if (!resp.ok) throw new Error(String(resp.status));
-      const bitmap = await createImageBitmap(await resp.blob());
+      const bitmap = await this.tiles.bitmap(productId);
+      if (!bitmap) throw new Error("no tile");
       const canvas = new OffscreenCanvas(TILE, TILE);
       const ctx = canvas.getContext("2d")!;
       // no pre-flip: copyTextureToTexture's upload path lands canvas row 0 at the

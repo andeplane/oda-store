@@ -3,6 +3,7 @@ import { loadWorld } from "./data";
 import { Cards } from "./cards";
 import { Residency } from "./residency";
 import { buildFixtures, buildShell } from "./fixtures";
+import { TileSource } from "./tiles";
 import { Player } from "./player";
 import { Cart } from "./cart";
 import { Interactions } from "./interact";
@@ -72,11 +73,12 @@ async function init() {
   const player = new Player(renderer.domElement, world.layout, fixtures);
   scene.add(player.rig);
 
-  const residency = new Residency(renderer, cards, detailRadius, (detailSize / 256) ** 2);
-  const cart = new Cart(world.catalog);
+  const tiles = new TileSource(world.atlasIndex);
+  const residency = new Residency(renderer, cards, tiles, detailRadius, (detailSize / 256) ** 2);
+  const cart = new Cart(world.catalog, tiles);
   cart.init();
-  const interact = new Interactions(world, cards, cart, player);
-  const vr = new VRMode(renderer, scene, world, cards, cart, player);
+  const interact = new Interactions(world, cards, cart, player, tiles);
+  const vr = new VRMode(renderer, scene, world, cards, cart, player, tiles);
 
   statusEl.textContent = `${world.catalog.products.length} varer i hyllene`;
   enterBtn.classList.remove("hidden");
