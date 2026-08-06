@@ -32,3 +32,5 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000 # 5.4k files deploy slowly; default 10 min gives up too early
