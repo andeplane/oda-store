@@ -1,6 +1,6 @@
 # ADR-0002: Rendering architecture for ~6.9k products
 
-**Status:** revised v3 after second-round review (all must-fix findings applied) · **Date:** 2026-08-06
+**Status:** revised v3 after second-round review (all must-fix findings applied) · **Date:** 2026-08-06 · flat cards superseded by 3D products in ADR-0006 (texture tiers, proxies and residency still apply)
 
 ## Context
 

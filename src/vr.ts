@@ -53,24 +53,10 @@ interface Held {
   lostFor: number;
 }
 
-function productCardMesh(product: Product, w: number, h: number, tiles: TileSource): THREE.Group {
+/** a product picked off the shelf: its 3D packaging plus a floating name/price tag */
+function heldProductMesh(product: Product, model: THREE.Object3D, h: number): THREE.Group {
   const g = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ color: 0xf4f4f6 });
-  const card = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-  card.material.side = THREE.DoubleSide;
-  g.add(card);
-  void tiles.bitmap(product.id).then((bmp) => {
-    if (!bmp) return;
-    const c = document.createElement("canvas");
-    c.width = c.height = 256;
-    c.getContext("2d")!.drawImage(bmp, 0, 0);
-    bmp.close();
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    mat.map = tex;
-    mat.color.set(0xffffff);
-    mat.needsUpdate = true;
-  });
+  g.add(model);
   // floating info card
   const c = document.createElement("canvas");
   c.width = 512;
@@ -91,6 +77,19 @@ function productCardMesh(product: Product, w: number, h: number, tiles: TileSour
   info.position.y = h / 2 + 0.06;
   g.add(info);
   return g;
+}
+
+function disposeObject(o: THREE.Object3D) {
+  o.traverse((c) => {
+    const m = c as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.geometry.dispose();
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      const map = (mat as THREE.MeshBasicMaterial).map;
+      if (map && !map.userData.shared) map.dispose(); // never the shared product atlas
+      mat.dispose();
+    }
+  });
 }
 
 function basketMesh(): THREE.Group {
@@ -290,7 +289,7 @@ export class VRMode {
     }
     const product = this.world.byId.get(cand.productId);
     if (!product) return;
-    const mesh = productCardMesh(product, cand.w, cand.h, this.tiles);
+    const mesh = heldProductMesh(product, this.cards.productObject(product.id, this.tiles), cand.h);
     mesh.position.copy(point);
     this.scene.add(mesh);
     this.held.set(hand, { product, mesh, lostFor: 0 });
@@ -517,6 +516,7 @@ export class VRMode {
       }
       if (tr.t > 0.6) {
         this.scene.remove(tr.mesh);
+        disposeObject(tr.mesh);
         this.transient.splice(i, 1);
       }
     }
