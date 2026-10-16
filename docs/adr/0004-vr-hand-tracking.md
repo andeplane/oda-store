@@ -40,8 +40,9 @@ VR phase: hand tracking to pick products off shelves and put them in a shopping 
 
 ### Locomotion & comfort
 
-- Room-scale walking + smooth locomotion on the left controller thumbstick. **45° snap turn on the right thumbstick is mandatory v1 comfort** (rotate the rig about the camera's world position, not the rig origin, or the user orbits). Radial vignette during stick motion (camera-parented alpha ring) — should-have. No teleport in v1 (pinch-teleport conflicts with pinch-grab).
-- Honest limitation: hands-only users move by physical walking, so they shop within their play space; full-store traversal needs controllers. Controllers and hands share slots (`getController(i)`/`getHand(i)`, `selectstart` vs `pinchstart`) and Quest hot-swaps mid-session — the `connected` event's `inputSource.hand !== null` distinguishes; trigger = grab is the controller fallback.
+- Room-scale walking + smooth locomotion on the left controller thumbstick. **45° snap turn on the right thumbstick is mandatory v1 comfort** (rotate the rig about the camera's world position, not the rig origin, or the user orbits). Radial vignette during stick motion (camera-parented alpha ring) — should-have.
+- **Gaze teleport (2026-10-16, replaces "no teleport in v1")**: hands-only users could not cross the store. Looking down at open floor (1–12 m away, not behind or inside a fixture) shows a floor marker; a pinch or trigger with **no product highlighted**, a right-stick flick forward, or holding the gaze ~1.2 s teleports the camera's world XZ there with a short blink. The highlight gate keeps pinch-grab and pinch-teleport apart; dwell re-arms only after the gaze moves on. Controllers now also highlight and carry products (trigger = grab), and `select` events from tracked hands are ignored so a pinch is handled once.
+- Controllers and hands share slots (`getController(i)`/`getHand(i)`, `selectstart` vs `pinchstart`) and Quest hot-swaps mid-session — the `connected` event's `inputSource.hand !== null` distinguishes; trigger = grab is the controller fallback.
 
 ### Performance & dev logistics (Quest)
 
@@ -51,7 +52,6 @@ VR phase: hand tracking to pick products off shelves and put them in a shopping 
 ## Alternatives considered
 
 - **Physics engine for drops** — deferred (dependency + Quest CPU); damped tweens suffice.
-- **Teleport for hands-only** — gesture conflicts with pinch-grab; deferred.
 - **Joint-parented held items** — rejected by review (pinch-time fingertip jitter).
 - **Stationary cart as the drop target** — rejected by review (round trip per item; unreachable for hands-only users deep in an aisle).
 - **AR/passthrough** — out of scope.

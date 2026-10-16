@@ -14,6 +14,12 @@ const RUN = 5.5;
 const LOOK_SPEED = 0.0022;
 const TOUCH_LOOK_SPEED = 0.005;
 const STICK_RADIUS = 60; // px of thumb travel for full walking speed
+const STICK_DEADZONE = 0.15; // thumb wobble near the origin must not creep the player
+const ACCEL = 10; // 1/s: velocity eases toward the input instead of starting dead
+const DECEL = 18; // 1/s: but stops quickly once keys are released, so it never feels slippery
+const MOUSE_SPIKE = 250; // px: Chrome occasionally reports a huge movementX/Y after a lock
+const TELEPORT_MIN = 1.0; // m of floor distance from the body
+const TELEPORT_MAX = 12;
 
 /** phones/tablets: no usable pointer lock, so they get the touch controller */
 export const isTouchDevice =
@@ -35,6 +41,10 @@ export class Player {
   private stickOrigin = { x: 0, y: 0 };
   private stick = { x: 0, y: 0 }; // -1..1, y negative = forward
   private lookTouches = new Map<number, { x: number; y: number }>();
+  private vel = new THREE.Vector2(); // world xz velocity (m/s)
+  private boxes: THREE.Box3[];
+  private ray = new THREE.Ray();
+  private boxHit = new THREE.Vector3();
   private stickEl = document.getElementById("touch-stick");
   private knobEl = document.getElementById("touch-knob");
 
@@ -51,9 +61,11 @@ export class Player {
     this.rig.rotation.y = this.yaw;
     this.camera.position.set(0, EYE_HEIGHT, 0);
     this.rig.add(this.camera);
+    this.boxes = fixtures.colliders.map((c) => new THREE.Box3(c.min, c.max));
 
     document.addEventListener("mousemove", (e) => {
       if (!this.locked || isTouchDevice) return;
+      if (Math.abs(e.movementX) > MOUSE_SPIKE || Math.abs(e.movementY) > MOUSE_SPIKE) return;
       this.look(e.movementX * LOOK_SPEED, e.movementY * LOOK_SPEED);
     });
     document.addEventListener("keydown", (e) => this.keys.add(e.code));
@@ -68,8 +80,10 @@ export class Player {
       this.setActive(true);
       return;
     }
+    // raw (unaccelerated) mouse input where supported, so look speed tracks hand speed;
     // returns a promise in modern browsers; a refused lock must not surface as an unhandled rejection
-    void Promise.resolve(this.dom.requestPointerLock()).catch(() => {});
+    const lock = (opts?: object) => Promise.resolve((this.dom.requestPointerLock as any)(opts));
+    void lock({ unadjustedMovement: true }).catch(() => lock().catch(() => {}));
   }
 
   /** leave walking mode (touch "menu" button; desktop leaves via Esc) */
@@ -86,6 +100,7 @@ export class Player {
     if (!active) {
       this.stickId = null;
       this.stick.x = this.stick.y = 0;
+      this.vel.set(0, 0);
       this.lookTouches.clear();
       this.updateStickEl(false);
     }
@@ -115,8 +130,8 @@ export class Player {
       if (!this.locked) return;
       e.preventDefault();
       for (const t of Array.from(e.changedTouches)) {
-        // a thumb landing on the left 40% of the screen drives the move stick
-        if (this.stickId === null && t.clientX < innerWidth * 0.4) {
+        // a thumb landing on the left half of the screen drives the move stick
+        if (this.stickId === null && t.clientX < innerWidth * 0.5) {
           this.stickId = t.identifier;
           this.stickOrigin = { x: t.clientX, y: t.clientY };
           this.stick.x = this.stick.y = 0;
@@ -165,6 +180,7 @@ export class Player {
 
   update(dt: number) {
     if (!this.locked) {
+      this.vel.set(0, 0);
       this.speed = 0;
       return;
     }
@@ -176,22 +192,73 @@ export class Player {
     if (this.keys.has("ArrowLeft") || this.keys.has("KeyQ") || (this.keys.has("KeyA") && !this.aIsAdd())) strafe -= 1;
     if (this.keys.has("ArrowRight") || this.keys.has("KeyE") || this.keys.has("KeyD")) strafe += 1;
     let scale = 1;
-    if (this.stickId !== null && (this.stick.x || this.stick.y)) {
-      fwd = this.stick.y;
-      strafe = this.stick.x;
-      scale = Math.min(1, Math.hypot(fwd, strafe));
+    if (this.stickId !== null) {
+      const mag = Math.hypot(this.stick.x, this.stick.y);
+      if (mag > STICK_DEADZONE) {
+        // rescale past the deadzone so walking still starts gently
+        scale = Math.min(1, (mag - STICK_DEADZONE) / (1 - STICK_DEADZONE));
+        fwd = this.stick.y;
+        strafe = this.stick.x;
+      }
     }
-    if (!fwd && !strafe) {
+    let tx = 0;
+    let tz = 0;
+    const len = Math.hypot(fwd, strafe);
+    if (len) {
+      const sin = Math.sin(this.yaw);
+      const cos = Math.cos(this.yaw);
+      tx = ((strafe / len) * cos + (fwd / len) * sin) * sp * scale;
+      tz = (-(strafe / len) * sin + (fwd / len) * cos) * sp * scale;
+    }
+    const k = 1 - Math.exp(-(len ? ACCEL : DECEL) * dt);
+    this.vel.x += (tx - this.vel.x) * k;
+    this.vel.y += (tz - this.vel.y) * k;
+    if (!len && this.vel.lengthSq() < 0.0004) this.vel.set(0, 0);
+    if (!this.vel.x && !this.vel.y) {
       this.speed = 0;
       return;
     }
-    const len = Math.hypot(fwd, strafe);
-    const sin = Math.sin(this.yaw);
-    const cos = Math.cos(this.yaw);
-    const dx = ((strafe / len) * cos + (fwd / len) * sin) * sp * scale * dt;
-    const dz = (-(strafe / len) * sin + (fwd / len) * cos) * sp * scale * dt;
-    this.move(dx, dz);
-    this.speed = sp * scale;
+    const before = this.rig.position.clone();
+    this.move(this.vel.x * dt, this.vel.y * dt);
+    // blocked by a shelf: keep only the velocity that actually happened (no sticky push into walls)
+    if (dt > 0) {
+      this.vel.set((this.rig.position.x - before.x) / dt, (this.rig.position.z - before.z) / dt);
+      if (this.vel.length() > sp) this.vel.setLength(sp); // a collider snap is not speed
+    }
+    this.speed = this.vel.length();
+  }
+
+  /**
+   * Where a gaze ray lands on open floor, or null when it isn't looking down at reachable floor
+   * (too near/far, behind a fixture, or the spot is inside a fixture's walk envelope).
+   */
+  floorTarget(origin: THREE.Vector3, dir: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 | null {
+    if (dir.y > -0.1 || origin.y <= 0) return null;
+    const t = -origin.y / dir.y;
+    out.copy(dir).multiplyScalar(t).add(origin);
+    out.y = 0;
+    const flat = Math.hypot(out.x - origin.x, out.z - origin.z);
+    if (flat < TELEPORT_MIN || flat > TELEPORT_MAX) return null;
+    const W = this.layout.hall.w;
+    const D = this.layout.hall.d;
+    const m = RADIUS + 0.1;
+    if (out.x < m || out.x > W - m || out.z < m || out.z > D - m) return null;
+    this.ray.set(origin, dir);
+    for (const b of this.boxes) {
+      if (
+        out.x > b.min.x - RADIUS && out.x < b.max.x + RADIUS &&
+        out.z > b.min.z - RADIUS && out.z < b.max.z + RADIUS
+      ) return null;
+      const hit = this.ray.intersectBox(b, this.boxHit);
+      if (hit && hit.distanceTo(origin) < t) return null;
+    }
+    return out;
+  }
+
+  /** move the rig so the body (camera world xz in VR) lands on target */
+  teleport(target: THREE.Vector3, body: THREE.Vector3) {
+    this.rig.position.x += target.x - body.x;
+    this.rig.position.z += target.z - body.z;
   }
 
   /** shared with VR locomotion: moves the rig with slide collision, using p as the body position */

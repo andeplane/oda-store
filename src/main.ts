@@ -114,6 +114,7 @@ async function init() {
     scene,
     player,
     cards,
+    vr,
     shot(width = 900) {
       renderer.render(scene, player.camera);
       const src = renderer.domElement;

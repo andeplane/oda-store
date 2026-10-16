@@ -47,6 +47,15 @@ export class Interactions {
       if (e.code === "KeyA") this.addPanelProduct();
       if (e.code === "KeyX") this.removePanelProduct();
     });
+    // pointer-locked mouse: left click adds, right click removes (A/X still work)
+    document.addEventListener("mousedown", (e) => {
+      if (!document.body.classList.contains("playing") || document.body.classList.contains("touch")) return;
+      if (e.button === 0) this.addPanelProduct();
+      if (e.button === 2) this.removePanelProduct();
+    });
+    document.addEventListener("contextmenu", (e) => {
+      if (document.body.classList.contains("playing")) e.preventDefault();
+    });
     // touch: the panel carries its own +/− buttons instead of A/X
     document.getElementById("detail-add")!.addEventListener("click", () => this.addPanelProduct());
     document.getElementById("detail-remove")!.addEventListener("click", () => this.removePanelProduct());
