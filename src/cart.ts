@@ -28,6 +28,9 @@ export class Cart {
         this.panelEl.classList.toggle("collapsed");
       }
     });
+    document.getElementById("cart-header")!.addEventListener("click", () => {
+      if (document.body.classList.contains("touch")) this.panelEl.classList.toggle("collapsed");
+    });
     document.getElementById("cart-export")!.addEventListener("click", () => this.copyExport());
   }
 
@@ -73,7 +76,9 @@ export class Cart {
     if (this.lines.size === 0) {
       const empty = document.createElement("div");
       empty.className = "cart-empty";
-      empty.textContent = "Sikt på en vare og trykk A for å legge den i kurven";
+      empty.textContent = document.body.classList.contains("touch")
+        ? "Sikt på en vare og trykk «Legg i kurv»"
+        : "Sikt på en vare og trykk A for å legge den i kurven";
       this.itemsEl.append(empty);
     }
     for (const { product, qty } of this.lines.values()) {
@@ -137,6 +142,8 @@ export class Cart {
   }
 
   init() {
+    // small screens: start collapsed so the cart doesn't cover the view; tap the header to open
+    if (document.body.classList.contains("touch")) this.panelEl.classList.add("collapsed");
     this.render();
   }
 }
