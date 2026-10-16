@@ -163,3 +163,45 @@ body.cartmode #cart-actions { display: flex; }
 .hidden { display: none !important; }
 
 #VRButton { z-index: 25 !important; }
+
+/* ---- touch devices (phones/tablets) ---- */
+.detail-touch, .touch-help, #touch-menu { display: none; }
+body.touch .detail-hint, body.touch #overlay-help > div:not(.touch-help) { display: none; }
+body.touch .touch-help { display: block; }
+body.touch .detail-touch { display: flex; gap: 8px; margin-top: 12px; pointer-events: auto; }
+.detail-touch button {
+  padding: 10px 14px; border-radius: 10px; border: none; font-weight: 700; font-size: 14px;
+  background: rgba(255, 255, 255, 0.12); color: var(--text);
+}
+.detail-touch #detail-add { flex: 1; background: var(--accent); color: #fff; }
+body.touch.playing #touch-menu {
+  display: block; position: absolute; left: 12px; top: calc(12px + env(safe-area-inset-top));
+  pointer-events: auto; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--panel-border);
+  background: var(--panel-bg); color: var(--text); font-weight: 600; font-size: 13px;
+}
+body.touch.playing #cart-header { pointer-events: auto; }
+body.touch.playing #VRButton { display: none !important; }
+#touch-stick {
+  position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.06);
+}
+#touch-knob {
+  position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px;
+  border-radius: 50%; background: rgba(255, 255, 255, 0.35);
+}
+
+@media (max-width: 600px) {
+  #overlay-card { padding: 20px; }
+  #overlay-card h1 { font-size: 32px; }
+  #overlay-progress { width: min(320px, 80vw); }
+  #detail-panel, #detail-panel.left {
+    left: 8px; right: 8px; top: auto; bottom: calc(8px + env(safe-area-inset-bottom));
+    transform: none; width: auto; max-height: 45vh; overflow-y: auto;
+  }
+  #detail-img { height: 110px; }
+  #detail-desc { max-height: 60px; }
+  #cart-panel { right: 8px; top: calc(8px + env(safe-area-inset-top)); width: min(260px, 60vw); }
+  #cart-items { max-height: 30vh; }
+  #hover-label { max-width: 90vw; }
+  #hover-name { overflow: hidden; text-overflow: ellipsis; }
+}

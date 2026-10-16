@@ -13,6 +13,14 @@ const BURST_UPLOADS = 12; // while the loading screen still covers the scene
 const RECOMPUTE_INTERVAL = 0.4; // s
 const HYSTERESIS = 1.5; // residents stay until radius * this
 
+/** OffscreenCanvas 2D needs Safari 16.4+; older iPhones fall back to a DOM canvas */
+function makeCanvas(): OffscreenCanvas | HTMLCanvasElement {
+  if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(TILE, TILE);
+  const c = document.createElement("canvas");
+  c.width = c.height = TILE;
+  return c;
+}
+
 interface SlotState {
   productId: number | null;
   lastWanted: number;
@@ -108,8 +116,8 @@ export class Residency {
     try {
       const bitmap = await this.tiles.bitmap(productId);
       if (!bitmap) throw new Error("no tile");
-      const canvas = new OffscreenCanvas(TILE, TILE);
-      const ctx = canvas.getContext("2d")!;
+      const canvas = makeCanvas();
+      const ctx = canvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
       // no pre-flip: copyTextureToTexture's upload path lands canvas row 0 at the
       // slot's high-v edge, which matches the shader's vUv convention (verified visually)
       ctx.fillStyle = "#f4f4f6";

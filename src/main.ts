@@ -4,7 +4,7 @@ import { Cards } from "./cards";
 import { Residency } from "./residency";
 import { buildFixtures, buildShell } from "./fixtures";
 import { TileSource } from "./tiles";
-import { Player } from "./player";
+import { Player, isTouchDevice } from "./player";
 import { Cart } from "./cart";
 import { Interactions } from "./interact";
 import { VRMode } from "./vr";
@@ -14,6 +14,7 @@ const statusEl = document.getElementById("overlay-status")!;
 const barEl = document.getElementById("overlay-bar")!;
 const enterBtn = document.getElementById("enter-btn") as HTMLButtonElement;
 const helpEl = document.getElementById("overlay-help")!;
+if (isTouchDevice) document.body.classList.add("touch");
 
 async function loadAtlases(count: number, format: string, onOne: () => void): Promise<THREE.Texture[]> {
   const loader = new THREE.TextureLoader();
@@ -45,9 +46,10 @@ async function init() {
     barEl.style.width = `${(loaded / world.atlasIndex.atlasCount) * 100}%`;
   });
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  // phones: no MSAA and a lower pixel-ratio cap keep GPU memory inside mobile budgets
+  const renderer = new THREE.WebGLRenderer({ antialias: !isTouchDevice, powerPreference: "high-performance" });
   renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, isTouchDevice ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NoToneMapping;
   document.getElementById("app")!.appendChild(renderer.domElement);
@@ -62,10 +64,11 @@ async function init() {
   scene.add(buildShell(world.layout));
   scene.add(fixtures.group);
 
-  // Quest gets the smaller detail cache + radius (ADR-0002)
+  // Quest and phones get the smaller detail cache + radius (ADR-0002)
   const isQuest = /OculusBrowser|Quest/i.test(navigator.userAgent);
-  const detailSize = isQuest ? 2048 : 4096;
-  const detailRadius = isQuest ? 3 : 7;
+  const small = isQuest || isTouchDevice;
+  const detailSize = small ? 2048 : 4096;
+  const detailRadius = small ? 3 : 7;
 
   const cards = new Cards(world, atlases, detailSize);
   for (const m of cards.meshes) scene.add(m);
@@ -92,11 +95,11 @@ async function init() {
     player.requestLock();
     setTimeout(() => (resumeBtn.disabled = false), 1500);
   });
-  document.addEventListener("pointerlockchange", () => {
-    const locked = document.pointerLockElement === renderer.domElement;
-    overlay.classList.toggle("hidden", locked);
-    if (!locked) interact.reset(); // cart-mode transition resets panel + dwell (ADR-0003)
-  });
+  document.getElementById("touch-menu")!.addEventListener("click", () => player.exit());
+  player.onActiveChange = (active) => {
+    overlay.classList.toggle("hidden", active);
+    if (!active) interact.reset(); // cart-mode transition resets panel + dwell (ADR-0003)
+  };
   renderer.xr.addEventListener("sessionstart", () => overlay.classList.add("hidden"));
   renderer.xr.addEventListener("sessionend", () => overlay.classList.remove("hidden"));
 

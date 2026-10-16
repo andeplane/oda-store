@@ -3,36 +3,47 @@ name: Deploy to GitHub Pages
 # Builds from main (atlases + tile pages are committed in public/) and deploys
 # the ~100-file dist artifact. Per-product images are NOT deployed — the Pages
 # pipeline times out on thousands of files; the app streams packed tile pages.
+# Pull requests run the build (typecheck + vite) without deploying.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx vite build --base=./
-      - uses: actions/upload-pages-artifact@v3
+      - run: npm run build -- --base=./
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
         with:
           path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # never cancel an in-flight Pages deployment: a cancelled one sticks to its
+    # SHA and blocks redeploys of that commit
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

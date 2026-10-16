@@ -2,7 +2,7 @@
 <html lang="no">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Oda Virtual Store</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -29,6 +29,10 @@
           </div>
           <div id="detail-classifiers"></div>
           <p id="detail-desc"></p>
+          <div class="detail-touch">
+            <button id="detail-remove">−</button>
+            <button id="detail-add">Legg i kurv</button>
+          </div>
           <div class="detail-hint"><kbd>A</kbd> +1 &nbsp; <kbd>X</kbd> −1 &nbsp;·&nbsp; <kbd>Q</kbd>/<kbd>←</kbd> sidesteg</div>
         </div>
       </div>
@@ -50,6 +54,9 @@
       </div>
 
       <div id="toast" class="hidden"></div>
+
+      <div id="touch-stick" class="hidden"><div id="touch-knob"></div></div>
+      <button id="touch-menu">Meny</button>
     </div>
 
     <div id="overlay">
@@ -59,6 +66,7 @@
         <div id="overlay-progress"><div id="overlay-bar"></div></div>
         <button id="enter-btn" class="hidden">Gå inn i butikken</button>
         <div id="overlay-help" class="hidden">
+          <div class="touch-help">Venstre tommel: gå &nbsp;·&nbsp; Dra: se rundt &nbsp;·&nbsp; Sikt på en vare for detaljer</div>
           <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> gå &nbsp; <kbd>Shift</kbd> løp &nbsp; <kbd>Mus</kbd> se</div>
           <div>Sikt på en vare i 0,5 s for detaljer &nbsp;·&nbsp; <kbd>A</kbd> legg i kurv &nbsp;·&nbsp; <kbd>C</kbd> kurv &nbsp;·&nbsp; <kbd>Esc</kbd> meny</div>
         </div>

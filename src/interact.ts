@@ -44,14 +44,22 @@ export class Interactions {
     player.aIsAdd = () => this.panelId !== null;
     document.addEventListener("keydown", (e) => {
       if (e.repeat || !document.body.classList.contains("playing")) return;
-      if (this.panelId === null) return;
-      const p = this.world.byId.get(this.panelId);
-      if (!p) return;
-      if (e.code === "KeyA") this.cart.add(p);
-      if (e.code === "KeyX") {
-        if (this.cart.remove(p.id)) this.cart.toast(`Fjernet ${p.name}`);
-      }
+      if (e.code === "KeyA") this.addPanelProduct();
+      if (e.code === "KeyX") this.removePanelProduct();
     });
+    // touch: the panel carries its own +/− buttons instead of A/X
+    document.getElementById("detail-add")!.addEventListener("click", () => this.addPanelProduct());
+    document.getElementById("detail-remove")!.addEventListener("click", () => this.removePanelProduct());
+  }
+
+  private addPanelProduct() {
+    const p = this.panelId === null ? undefined : this.world.byId.get(this.panelId);
+    if (p) this.cart.add(p);
+  }
+
+  private removePanelProduct() {
+    const p = this.panelId === null ? undefined : this.world.byId.get(this.panelId);
+    if (p && this.cart.remove(p.id)) this.cart.toast(`Fjernet ${p.name}`);
   }
 
   reset() {
