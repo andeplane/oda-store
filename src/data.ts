@@ -84,10 +84,20 @@ export interface AtlasIndex {
   tiles: Record<string, { atlas: number; uv: [number, number, number, number]; d?: [number, number, number] }>;
 }
 
+/** Per-product packaging (public/products3d.json, built by scripts/build_products3d.py). */
+export interface Products3D {
+  schemaVersion: number;
+  catalogHash: string;
+  shapes: string[];
+  /** id -> [shape index, w, h, d (cm), sRGB hex colour] */
+  items: Record<string, [number, number, number, number, string]>;
+}
+
 export interface World {
   catalog: Catalog;
   layout: Layout;
   atlasIndex: AtlasIndex;
+  products3d: Products3D;
   byId: Map<number, Product>;
 }
 
@@ -99,16 +109,21 @@ async function getJson<T>(url: string): Promise<T> {
 
 export async function loadWorld(onProgress: (msg: string) => void): Promise<World> {
   onProgress("Henter katalog…");
-  const [catalog, layout, atlasIndex] = await Promise.all([
+  const [catalog, layout, atlasIndex, products3d] = await Promise.all([
     getJson<Catalog>("catalog.json"),
     getJson<Layout>("layout.json"),
     getJson<AtlasIndex>("atlas-index.json"),
+    getJson<Products3D>("products3d.json"),
   ]);
-  if (layout.catalogHash !== catalog.catalogHash || atlasIndex.catalogHash !== catalog.catalogHash) {
+  if (
+    layout.catalogHash !== catalog.catalogHash ||
+    atlasIndex.catalogHash !== catalog.catalogHash ||
+    products3d.catalogHash !== catalog.catalogHash
+  ) {
     throw new Error("layout/atlas snapshot does not match catalog — re-run the pipeline");
   }
   const byId = new Map(catalog.products.map((p) => [p.id, p]));
-  return { catalog, layout, atlasIndex, byId };
+  return { catalog, layout, atlasIndex, products3d, byId };
 }
 
 // Descriptions are a lazily-fetched chunk (ADR-0002 loading budget).

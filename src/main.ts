@@ -8,6 +8,8 @@ import { Player, isTouchDevice } from "./player";
 import { Cart } from "./cart";
 import { Interactions } from "./interact";
 import { VRMode } from "./vr";
+import { loadProductAtlas, probeMaxTextureSize } from "./atlas";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 const overlay = document.getElementById("overlay")!;
 const statusEl = document.getElementById("overlay-status")!;
@@ -16,35 +18,20 @@ const enterBtn = document.getElementById("enter-btn") as HTMLButtonElement;
 const helpEl = document.getElementById("overlay-help")!;
 if (isTouchDevice) document.body.classList.add("touch");
 
-async function loadAtlases(count: number, format: string, onOne: () => void): Promise<THREE.Texture[]> {
-  const loader = new THREE.TextureLoader();
-  return Promise.all(
-    Array.from({ length: count }, (_, i) =>
-      new Promise<THREE.Texture>((resolve, reject) => {
-        loader.load(
-          `atlas/base-${i}.${format === "ktx2" ? "ktx2" : "png"}`,
-          (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.anisotropy = 2; // gutters are the real bleed defense (ADR-0002)
-            onOne();
-            resolve(tex);
-          },
-          undefined,
-          reject
-        );
-      })
-    )
-  );
-}
-
 async function init() {
   const world = await loadWorld((m) => (statusEl.textContent = m));
   statusEl.textContent = "Laster vareveggene…";
   let loaded = 0;
-  const atlases = await loadAtlases(world.atlasIndex.atlasCount, world.atlasIndex.format, () => {
-    loaded++;
-    barEl.style.width = `${(loaded / world.atlasIndex.atlasCount) * 100}%`;
-  });
+  // phones keep the combined atlas at half resolution (memory); near products stream sharp tiles anyway
+  const atlas = await loadProductAtlas(
+    world.atlasIndex.atlasCount,
+    world.atlasIndex.format,
+    isTouchDevice ? 4096 : probeMaxTextureSize(),
+    () => {
+      loaded++;
+      barEl.style.width = `${(loaded / world.atlasIndex.atlasCount) * 100}%`;
+    }
+  );
 
   // phones: no MSAA and a lower pixel-ratio cap keep GPU memory inside mobile budgets
   const renderer = new THREE.WebGLRenderer({ antialias: !isTouchDevice, powerPreference: "high-performance" });
@@ -70,7 +57,20 @@ async function init() {
   const detailSize = small ? 2048 : 4096;
   const detailRadius = small ? 3 : 7;
 
-  const cards = new Cards(world, atlases, detailSize);
+  // Quest and phones: fewer copies per slot and shorter detail distances (vertex budget)
+  const cards = new Cards(
+    world,
+    atlas,
+    detailSize,
+    small
+      ? { maxFacings: 2, maxRows: 2, nearRadius: 2.5, farRadius: 9 }
+      : { maxFacings: 4, maxRows: 3, nearRadius: 7, farRadius: 22 }
+  );
+  // studio-like reflections for products only (fixtures keep the plain hall lighting)
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  cards.material.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  cards.material.envMapIntensity = 0.6;
+  pmrem.dispose();
   for (const m of cards.meshes) scene.add(m);
 
   const player = new Player(renderer.domElement, world.layout, fixtures);
@@ -125,7 +125,7 @@ async function init() {
       return c.toDataURL("image/jpeg", 0.85);
     },
     stats() {
-      return { drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+      return { drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, products: cards.stats() };
     },
   };
 
@@ -139,6 +139,7 @@ async function init() {
       if (inXR) vr.update(dt);
       interact.update(dt, player.locked && !inXR);
       player.camera.getWorldPosition(camWorld);
+      cards.update(camWorld);
       residency.update(dt, camWorld);
       if (firstFrames++ === 90) residency.burst = false; // cold-fill burst window over
       renderer.render(scene, player.camera);
