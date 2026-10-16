@@ -1,6 +1,6 @@
 // WebXR + hand tracking (ADR-0004 v3): pinch-grab clones off the shelf, damped
 // world-space holds keyed by handedness, hip basket + stationary cart drop targets,
-// controller fallback, snap turn, session-end camera restore.
+// controller fallback, snap turn, gaze teleport, session-end camera restore.
 
 import * as THREE from "three";
 import { VRButton } from "three/examples/jsm/webxr/VRButton.js";
@@ -15,6 +15,37 @@ const GRAB_RANGE = 0.25;
 const DAMP_K = 20;
 const TRACKLOSS_CANCEL = 0.2; // s
 const SNAP_ANGLE = Math.PI / 4;
+// gaze teleport: look at open floor, then pinch / pull a trigger / flick the right stick
+// forward, or just hold the gaze there (hands-only users have no other way to cross the store)
+const TELEPORT_DWELL = 1.2; // s
+const TELEPORT_DRIFT = 0.4; // m the gaze spot may wander while the dwell fills
+const TELEPORT_REARM = 0.8; // m the gaze must move after a teleport before dwell fills again
+const FADE_IN = 0.25; // s blink after a teleport
+const MARKER_SEGMENTS = 48;
+
+function teleportMarker(): { group: THREE.Group; fill: THREE.Mesh } {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.26, 0.3, MARKER_SEGMENTS),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })
+  );
+  const fill = new THREE.Mesh(
+    new THREE.RingGeometry(0.17, 0.25, MARKER_SEGMENTS, 1, Math.PI / 2, Math.PI * 2),
+    new THREE.MeshBasicMaterial({ color: 0xff5230, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide })
+  );
+  const dot = new THREE.Mesh(
+    new THREE.CircleGeometry(0.05, 16),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })
+  );
+  for (const m of [ring, fill, dot]) {
+    m.rotation.x = -Math.PI / 2;
+    m.renderOrder = 5;
+    g.add(m);
+  }
+  g.position.y = 0.01;
+  g.visible = false;
+  return { group: g, fill };
+}
 
 interface Held {
   product: Product;
@@ -112,6 +143,17 @@ export class VRMode {
   private hands: THREE.XRHandSpace[] = [];
   private controllers: THREE.XRTargetRaySpace[] = [];
   private snapReady = true;
+  private teleportReady = true;
+  private isHand = [false, false]; // controller slot i currently carries a tracked hand
+  private marker = teleportMarker();
+  private gaze = new THREE.Vector3();
+  private gazeValid = false;
+  private dwellAnchor = new THREE.Vector3();
+  private dwell = 0;
+  private armed = true;
+  private rearmFrom: THREE.Vector3 | null = null; // first gaze spot seen after a teleport
+  private fade: THREE.Mesh;
+  private fadeT = FADE_IN;
   private transient: { mesh: THREE.Object3D; t: number; kind: "settle" | "fade"; target?: THREE.Vector3 }[] = [];
   private tmp = new THREE.Vector3();
   private tmp2 = new THREE.Vector3();
@@ -143,9 +185,28 @@ export class VRMode {
       const ctrl = renderer.xr.getController(i);
       player.rig.add(ctrl);
       this.controllers.push(ctrl);
-      ctrl.addEventListener("selectstart", () => this.onGrab(`ctrl${i}`, ctrl.getWorldPosition(new THREE.Vector3())));
-      ctrl.addEventListener("selectend", () => this.onRelease(`ctrl${i}`));
+      // a tracked hand also fires select on pinch — the pinch handlers own that case
+      ctrl.addEventListener("connected", (e) => (this.isHand[i] = !!(e as any).data?.hand));
+      ctrl.addEventListener("disconnected", () => (this.isHand[i] = false));
+      ctrl.addEventListener("selectstart", (e) => {
+        if ((e as any).data?.hand) return;
+        this.onGrab(`ctrl${i}`, ctrl.getWorldPosition(new THREE.Vector3()));
+      });
+      ctrl.addEventListener("selectend", (e) => {
+        if ((e as any).data?.hand) return;
+        this.onRelease(`ctrl${i}`);
+      });
     }
+
+    scene.add(this.marker.group);
+    // camera-parented blink sphere hides the jump cut
+    this.fade = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, side: THREE.BackSide, depthTest: false, depthWrite: false })
+    );
+    this.fade.renderOrder = 999;
+    this.fade.visible = false;
+    player.camera.add(this.fade);
 
     this.basket = basketMesh();
     scene.add(this.basket);
@@ -175,6 +236,8 @@ export class VRMode {
     });
     renderer.xr.addEventListener("sessionend", () => {
       this.basket.visible = false;
+      this.marker.group.visible = false;
+      this.fade.visible = false;
       document.body.classList.remove("xr");
       // three.js does NOT restore the camera (verified) — reset eye height, keep yaw
       player.camera.position.set(0, EYE_HEIGHT, 0);
@@ -219,9 +282,12 @@ export class VRMode {
 
   private onGrab(hand: string, point: THREE.Vector3 | null) {
     if (!this.renderer.xr.isPresenting || !point || this.held.has(hand)) return;
-    // pre-pinch candidate gate: only grab what is highlighted
+    // pre-pinch candidate gate: only grab what is highlighted; nothing highlighted → teleport to the gaze spot
     const cand = this.candidates.get(hand);
-    if (!cand) return;
+    if (!cand) {
+      this.tryTeleport();
+      return;
+    }
     const product = this.world.byId.get(cand.productId);
     if (!product) return;
     const mesh = productCardMesh(product, cand.w, cand.h, this.tiles);
@@ -243,6 +309,54 @@ export class VRMode {
     } else {
       this.transient.push({ mesh: held.mesh, t: 0, kind: "fade" });
     }
+  }
+
+  private tryTeleport(): boolean {
+    if (!this.gazeValid || this.held.size) return false;
+    const body = this.player.camera.getWorldPosition(new THREE.Vector3());
+    this.player.teleport(this.gaze, body);
+    this.rearmFrom = null;
+    this.armed = false;
+    this.dwell = 0;
+    this.gazeValid = false;
+    this.marker.group.visible = false;
+    this.fadeT = 0;
+    // the basket and anything mid-animation travel with the player
+    const dx = this.gaze.x - body.x;
+    const dz = this.gaze.z - body.z;
+    this.basket.position.x += dx;
+    this.basket.position.z += dz;
+    return true;
+  }
+
+  private updateGaze(dt: number, camPos: THREE.Vector3, moving: boolean) {
+    const dir = this.player.camera.getWorldDirection(this.tmp2);
+    const hit = this.held.size ? null : this.player.floorTarget(camPos, dir, this.tmp);
+    this.gazeValid = !!hit;
+    const m = this.marker;
+    if (!hit) {
+      m.group.visible = false;
+      this.dwell = 0;
+      this.armed = true;
+      return;
+    }
+    this.gaze.copy(hit);
+    m.group.visible = true;
+    m.group.position.set(hit.x, 0.01, hit.z);
+    // after a teleport the dwell stays off until the gaze has clearly moved on (or left the floor)
+    if (!this.armed) {
+      if (!this.rearmFrom) this.rearmFrom = hit.clone();
+      else if (hit.distanceTo(this.rearmFrom) > TELEPORT_REARM) this.armed = true;
+    }
+    if (!this.armed || moving || hit.distanceTo(this.dwellAnchor) > TELEPORT_DRIFT) {
+      this.dwellAnchor.copy(hit);
+      this.dwell = 0;
+    } else {
+      this.dwell += dt;
+    }
+    const p = Math.min(this.dwell / TELEPORT_DWELL, 1);
+    m.fill.geometry.setDrawRange(0, Math.floor(p * MARKER_SEGMENTS) * 6);
+    if (this.dwell >= TELEPORT_DWELL) this.tryTeleport();
   }
 
   private inBasket(p: THREE.Vector3): boolean {
@@ -322,7 +436,28 @@ export class VRMode {
       }
     }
 
+    // controllers: same highlight-then-grab gate, held item follows the grip
+    for (let i = 0; i < this.controllers.length; i++) {
+      const key = `ctrl${i}`;
+      if (this.isHand[i]) {
+        if (this.candidates.get(key)) this.setCandidate(key, null);
+        continue;
+      }
+      const ctrl = this.controllers[i];
+      const p = ctrl.getWorldPosition(new THREE.Vector3());
+      const held = this.held.get(key);
+      if (held) {
+        const hk = 1 - Math.exp(-DAMP_K * dt);
+        held.mesh.position.lerp(p, hk);
+        held.mesh.quaternion.slerp(ctrl.getWorldQuaternion(new THREE.Quaternion()), hk);
+        this.setCandidate(key, null);
+      } else {
+        this.setCandidate(key, this.nearestCard(p));
+      }
+    }
+
     // controller locomotion + snap turn
+    let moving = false;
     const session = this.renderer.xr.getSession();
     if (session) {
       for (const src of session.inputSources) {
@@ -332,6 +467,7 @@ export class VRMode {
         const ay = axes[3];
         if (src.handedness === "left") {
           if (Math.abs(ax) > 0.1 || Math.abs(ay) > 0.1) {
+            moving = true;
             // stick forward (-ay) moves along camera yaw; stick x strafes
             const SPEED = 2.2;
             this.player.move(
@@ -347,8 +483,26 @@ export class VRMode {
           } else if (Math.abs(ax) < 0.3) {
             this.snapReady = true;
           }
+          // right stick flicked forward: teleport to the gaze spot
+          if (ay < -0.7 && Math.abs(ax) < 0.5 && this.teleportReady) {
+            this.teleportReady = false;
+            this.tryTeleport();
+          } else if (ay > -0.3) {
+            this.teleportReady = true;
+          }
         }
       }
+    }
+
+    this.updateGaze(dt, camPos, moving);
+
+    // post-teleport blink
+    if (this.fadeT < FADE_IN) {
+      this.fadeT += dt;
+      this.fade.visible = true;
+      (this.fade.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - this.fadeT / FADE_IN);
+    } else {
+      this.fade.visible = false;
     }
 
     // transient animations
